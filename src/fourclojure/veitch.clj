@@ -21,16 +21,12 @@
           height (count kmap)
           log2 {1 0, 2 1, 4 2}
           gray-codes-for-box (fn [symbols positions]
-                               (let [gray-codes (gray-codes symbols)]
-                                 (apply clojure.set/intersection
-                                        (map #(nth gray-codes %)
-                                             positions))))
+                               (apply clojure.set/intersection
+                                      (let [gray-codes (gray-codes symbols)]
+                                        (map #(nth gray-codes %) positions))))
           cyclic-ranges (fn [distance size]
-                          (map #(take size %)
-                               (->> (range distance)
-                                    cycle
-                                    (iterate rest)
-                                    (take distance))))
+                          (for [start (range distance)]
+                            (take size (drop start (cycle (range distance))))))
           rectangle-positions (fn [size]
                                 (set (mapcat (fn [divisor]
                                                (for [xs (cyclic-ranges width (/ size divisor))
@@ -46,9 +42,7 @@
                                                                                  (map second pairs)))
                                           (set (map (fn [[x y]] (nth (nth kmap y) x))
                                                     pairs))])
-          boxes-sized (fn [size]
-                        (set (map convert-pairs-to-expressions
-                                  (rectangle-positions size))))
+          boxes-sized (fn [size] (set (map convert-pairs-to-expressions (rectangle-positions size))))
           mostly-reduced (set (reduce (fn [existing-conditions new-conditions]
                                         (into existing-conditions
                                               (filter (fn [new]
