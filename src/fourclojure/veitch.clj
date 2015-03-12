@@ -4,7 +4,7 @@
    (let [symlower #(symbol (.toLowerCase (name %)))
          symupper #(symbol (.toUpperCase (name %)))
          gray-codes (fn gray-codes [symbols]
-                      (if (zero? (count symbols)) [#{}]
+                      (if (empty? symbols) [#{}]
                         (let [current (first symbols)
                               rest-of-codes (gray-codes (rest symbols))]
                           (map set (concat (map #(cons (symlower current) %)
