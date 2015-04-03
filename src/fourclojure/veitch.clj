@@ -1,58 +1,105 @@
 (ns fourclojure.veitch)
 
-(def full-function
-  (fn [conditions]
-    (let [negative #(symbol (.toLowerCase (name %)))
-          positive #(symbol (.toUpperCase (name %)))
-          gray-codes (fn gray-codes [symbols]
-                       (if (empty? symbols) [#{}]
-                           (let [varying (first symbols)
-                                 subsequent-gray-codes (gray-codes (rest symbols))]
-                             (concat (map #(conj % (negative varying))
-                                          subsequent-gray-codes)
-                                     (map #(conj % (positive varying))
-                                          (reverse subsequent-gray-codes))))))
-          symbols (sort (map negative (first conditions)))
-          [x-gray-codes y-gray-codes] (map gray-codes (split-at (Math/ceil (/ (count symbols) 2))
-                                                                symbols))
-          kmap (map (fn [y-gray-code] (map #(if (conditions (set (concat % y-gray-code))) 1 0)
-                                           x-gray-codes)) y-gray-codes)
-          width (count (first kmap))
-          height (count kmap)
-          log2 {1 0, 2 1, 4 2}
-          gray-codes-for-box (fn [symbols positions]
-                               (apply clojure.set/intersection
-                                      (let [gray-codes (gray-codes symbols)]
-                                        (map #(nth gray-codes %) positions))))
-          cyclic-ranges (fn [distance size]
-                          (for [start (range distance)]
-                            (take size (drop start (cycle (range distance))))))
-          rectangle-positions (fn [size]
-                                (set (mapcat (fn [divisor]
-                                               (for [xs (cyclic-ranges width (/ size divisor))
-                                                     ys (cyclic-ranges height divisor)]
-                                                 (set (mapcat #(map (fn [x] [x %]) xs)
-                                                              ys))))
-                                             [1 2 4])))
-          convert-pairs-to-expressions (fn [pairs]
-                                         [(clojure.set/union (gray-codes-for-box (take (log2 width) symbols)
-                                                                                 (map first pairs))
-                                                             (gray-codes-for-box (take (log2 height)
-                                                                                       (drop (log2 width) symbols))
-                                                                                 (map second pairs)))
-                                          (set (map (fn [[x y]] (nth (nth kmap y) x))
-                                                    pairs))])
-          boxes-sized (fn [size] (set (map convert-pairs-to-expressions (rectangle-positions size))))
-          mostly-reduced (set (reduce (fn [existing-conditions new-conditions]
-                                        (into existing-conditions
-                                              (filter (fn [new]
-                                                        (not (some (fn [existing]
-                                                                     (every? new existing))
-                                                                   existing-conditions)))
-                                                      new-conditions)))
-                                      (map (fn [size]
-                                             (map first
-                                                  (filter #(not ((second %) 0))
-                                                          (boxes-sized size))))
-                                           [8 4 2 1])))]
-      (disj mostly-reduced '#{A d}))))
+(defn negative [s]
+  (symbol (.toLowerCase (name s))))
+
+(defn positive [s]
+  (symbol (.toUpperCase (name s))))
+
+(defn gray-codes [symbols]
+  (if (empty? symbols) [#{}]
+      (let [varying (first symbols)
+            subsequent-gray-codes (gray-codes (rest symbols))]
+        (concat (map #(conj % (negative varying))
+                     subsequent-gray-codes)
+                (map #(conj % (positive varying))
+                     (reverse subsequent-gray-codes))))))
+
+(defn divide-symbols [symbols]
+  (split-at (Math/ceil (/ (count symbols) 2)) symbols))
+
+(defn build-grid [conditions x-gray-codes y-gray-codes]
+  (map (fn [y-gray-code]
+         (map #(if (conditions (set (concat % y-gray-code))) 1 0)
+              x-gray-codes)) y-gray-codes))
+
+(defn build-kmap [conditions]
+  (let [[x-gray-codes y-gray-codes] (->> (first conditions)
+                                         (map negative)
+                                         sort
+                                         divide-symbols
+                                         (map gray-codes))
+        grid (build-grid conditions x-gray-codes y-gray-codes)]
+    {:grid grid
+     :x-gray-codes x-gray-codes
+     :y-gray-codes y-gray-codes
+     :width (count (first grid))
+     :height (count grid)}))
+
+
+(defn gray-codes-for-box [gray-codes positions]
+  (apply clojure.set/intersection
+         (map #(nth gray-codes %) positions)))
+
+(defn cyclic-ranges [distance size]
+  (for [start (range distance)]
+    (take size (drop start (cycle (range distance))))))
+
+(defn rectangle-coordinates [kmap size]
+  (set (for [divisor [1 2 4]
+             xs (cyclic-ranges (kmap :width)
+                               (/ size divisor))
+             ys (cyclic-ranges (kmap :height)
+                               divisor)]
+         (set (for [x xs y ys] [x y])))))
+
+(defn convert-pairs-to-expressions [kmap pairs]
+  [(clojure.set/union
+    (gray-codes-for-box (kmap :x-gray-codes)
+                        (map first pairs))
+    (gray-codes-for-box (kmap :y-gray-codes)
+                        (map second pairs)))
+   (set (map (fn [[x y]] (nth (nth (kmap :grid)
+                                   y) x))
+             pairs))])
+
+(defn boxes-sized [kmap size]
+  (set (map #(convert-pairs-to-expressions kmap %)
+            (rectangle-coordinates kmap size))))
+
+(defn identify-simplifications [kmap]
+  (map (fn [size] (->> (boxes-sized kmap size)
+                       (filter #(not (get-in % [1 0])))
+                       (map first)))
+       [8 4 2 1]))
+
+
+(defn already-fulfilled? [existing-conditions new-condition]
+  (not (some (fn [existing]
+               (every? new-condition existing))
+             existing-conditions)))
+
+(defn prune-fulfilled [simplified-conditions]
+  (set (reduce (fn [existing-conditions new-conditions]
+                 (into existing-conditions
+                       (filter #(already-fulfilled? existing-conditions %) new-conditions)))
+               simplified-conditions)))
+
+(defn identify-condition-coverage [full-conditions simplified-conditions]
+  (into {} (map (fn [condition]
+                  [condition (filter #(every? condition %)
+                                     simplified-conditions)])
+                full-conditions)))
+
+(defn prune-duplicates [full-conditions simplified-conditions]
+  (->> (prune-fulfilled simplified-conditions)
+       (identify-condition-coverage full-conditions)
+       (filter #(= (count (val %)) 1))
+       (mapcat val)
+       set))
+
+
+(defn simplify-rules [conditions]
+  (->> (build-kmap conditions)
+       identify-simplifications
+       (prune-duplicates conditions)))
