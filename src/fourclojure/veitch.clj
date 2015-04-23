@@ -87,23 +87,27 @@
 
 (defn identify-condition-coverage [full-conditions simplified-conditions]
   (into {} (map (fn [condition]
-                  [condition (filter #(every? condition %)
-                                     simplified-conditions)])
+                  [condition (set (filter #(every? condition %)
+                                          simplified-conditions))])
                 full-conditions)))
 
-(defn necessary-condition? [coverage condition]
-  )
+(defn necessary-condition? [coverage candidate]
+  (some #(and (= 1 (count %)) (% candidate)) (vals coverage)))
+
+(defn remove-from-coverage [coverage candidate]
+  (into {} (map (fn [[original-rule covering-rules]]
+                  [original-rule (disj covering-rules candidate)])
+                coverage)))
 
 (defn prune-duplicates [full-conditions simplified-conditions]
-  (let [condition-coverage (->> (prune-fulfilled simplified-conditions)
-                                (identify-condition-coverage full-conditions))]
-    (->> (reduce (fn [coverage necessary candidate]
-                   (if (necessary-condition? coverage candidate)
-                     (conj necessary candidate)
-                     necessary))
-                 condition-coverage)
-         second
-         set)))
+  (let [pruned-conditions (prune-fulfilled simplified-conditions)
+        condition-coverage (identify-condition-coverage full-conditions pruned-conditions)]
+    (second (reduce (fn [[coverage necessary] candidate]
+                      (if (necessary-condition? coverage candidate)
+                        [coverage (conj necessary candidate)]
+                        [(remove-from-coverage coverage candidate) necessary]))
+                    [condition-coverage #{}]
+                    pruned-conditions))))
 
 
 (defn simplify-rules [conditions]

@@ -79,14 +79,13 @@
                            #{'A 'b 'C 'd}})
          #{#{'B 'D}
            #{'b 'd}}))
-  ;; (is (= (simplify-rules '#{#{a b c d}
-  ;;                           #{a B c d}
-  ;;                           #{a B c D}
-  ;;                           #{a B C D}
-  ;;                           #{a b C D}
-  ;;                           #{a b C d}})
-  ;;        '#{#{a c d}
-  ;;           #{a B D}
-  ;;           #{a C D}
-  ;;           #{a b C}}))
+  (is (= (simplify-rules '#{#{a b c d}
+                            #{a B c d}
+                            #{a B c D}
+                            #{a B C D}
+                            #{a b C D}
+                            #{a b C d}})
+         '#{#{a c d}
+            #{a B D}
+            #{a b C}}))
   )
