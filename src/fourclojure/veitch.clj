@@ -91,12 +91,19 @@
                                      simplified-conditions)])
                 full-conditions)))
 
+(defn necessary-condition? [coverage condition]
+  )
+
 (defn prune-duplicates [full-conditions simplified-conditions]
-  (->> (prune-fulfilled simplified-conditions)
-       (identify-condition-coverage full-conditions)
-       (filter #(= (count (val %)) 1))
-       (mapcat val)
-       set))
+  (let [condition-coverage (->> (prune-fulfilled simplified-conditions)
+                                (identify-condition-coverage full-conditions))]
+    (->> (reduce (fn [coverage necessary candidate]
+                   (if (necessary-condition? coverage candidate)
+                     (conj necessary candidate)
+                     necessary))
+                 condition-coverage)
+         second
+         set)))
 
 
 (defn simplify-rules [conditions]
